@@ -1,0 +1,253 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja" lang="ja">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Soroban Dictation Trainer</title>
+    <link rel="shortcut icon" href="sorodict.png?v=2">
+  </head>
+  <body>
+    <div>1. Select Voice. <select id="optarea"></select>&nbsp;&nbsp;<button id="SpeechSynthesisStart">Sound Test (123456789)</button></div>
+    <div>2. Adjust Speed.&nbsp;&nbsp; Slow<input type="range" id="speed" onChange="speedControl();">Fast</div>
+    <div>3. Adjust Pitch.&nbsp;&nbsp; Low<input type="range" id="pitch" onChange="pitchControl();">High</div>
+    <hr>
+    <div>4. Specify Range of Numbers: <input id="minvalue" type="text" value="1" maxlength="15">&nbsp;〜&nbsp;<input id="maxvalue" type="text" value="999999" maxlength="15">&nbsp;&nbsp;<input type="checkbox" id="FractionP" checked="checked"> Fraction
+    </div>
+    <div>5. Specify Rows of Numbers: <input id="numvalue" type="text" value="10" maxlength="15">&nbsp;&nbsp;<input type="checkbox" id="SubtractP" checked="checked"> Subtraction</div>
+    <div>6. Generate Excercise: <button id="Generate">Generate Exercise</button></div>
+    <hr>
+    <div>7. Go!&nbsp;&nbsp;<button id="DictationStart">&nbsp;▶&nbsp;</button>
+           <button id="SpeechSynthesisPause">&nbsp;❚ ❚&nbsp; </button>
+           <button id="SpeechSynthesisStop"> &nbsp;■&nbsp; </button>
+    </div>
+    <hr>
+    <div>8. Check the Answer. <button id="CheckAnswer">Check the Answer</button></div>
+
+    <script type="text/javascript">
+      // GLOBALS
+      var utterance;
+      var voiceSelect = document.getElementById('optarea');
+      var elmStart = document.getElementById('SpeechSynthesisStart');
+      var speedBar = document.getElementById('speed');
+      var pitchBar = document.getElementById('pitch');
+      var elmDictStart = document.getElementById('DictationStart');
+      var elmPause = document.getElementById('SpeechSynthesisPause');
+      var elmStop = document.getElementById('SpeechSynthesisStop');
+      var elmGenerate = document.getElementById('Generate');
+      var elmCheckAnswer = document.getElementById('CheckAnswer');
+  
+      var voices = [];
+      var speed = 1.0;
+      var pitch = 1.0;
+
+      var supportLang = ['en', 'ja'];
+      var languageTemplate = {ja:'ねがいましては:引いては:たしては:円:銭:なり。:では。:正解は:です。',
+                                          en:'Starting with:subtract:add:dollars:cents:.:That\'s all.:The answer is:.',
+      }
+      var template = [];
+      const PREAMBLE = 0;
+      const PREFIXMINUS = 1;
+      const PREFIXPLUS = 2;
+      const INTEGER = 3;
+      const FRACTION = 4;
+      const POSTFIX = 5;
+      const POSTAMBLE = 6;
+      const ANSPREFIX = 7;
+      const ANSPOSTFIX = 8;
+
+      var problem = [100,200,-300,-400,-500,600,700,800,900,1000];  // All values are divided by 100
+
+      // Get answer
+      function getAnswerText() {
+        var ans = 0;
+        for (var i = 0; i < problem.length; i++) {
+          ans += problem[i];
+        }
+        return template[ANSPREFIX] + ' ' + readNumber(ans) + ' ' + template[ANSPOSTFIX];
+      }
+
+      // Script Number
+      function readNumber(num) {
+        var intpart = Math.floor(num / 100);
+        var fracpart = num % 100;
+        var result = ' ' + intpart + ' ' + template[INTEGER] + ' ';
+        if (fracpart != 0)
+          result += fracpart + ' ' + template[FRACTION] + ' ';
+        return result;
+      }
+
+      // Make up Content
+      function makeContent() {
+        var result = template[PREAMBLE];     // starting with
+        var adding = true;
+        for (var i = 0; i < problem.length-1; i++) {
+          var n = problem[i];
+          if (n < 0) {
+            n = Math.abs(n);
+            if (adding) {
+              result += ' ' + template[PREFIXMINUS];
+            }
+            adding = false;
+          } else {
+            if (!adding) {
+              result += ' ' + template[PREFIXPLUS];
+            }
+            adding = true;
+          }
+          result += readNumber(n) + template[POSTFIX];
+        }
+        var n = problem[problem.length-1];
+        if (n < 0) {
+          n = Math.abs(n);
+          if (adding) {
+            result += ' ' + template[PREFIXMINUS];
+          }
+        } else {
+          if (!adding) {
+            result += template[PREFIXPLUS];
+          }
+        }
+        result += readNumber(n)  + ' ' + template[POSTAMBLE];
+        return result;
+      }
+
+      // Dictation Start
+      elmDictStart.addEventListener('click', function () {
+        if (speechSynthesis.speaking) {
+          speechSynthesis.resume();
+        } else {
+          utterance = new SpeechSynthesisUtterance();
+          utterance.voice = voices[voiceSelect.options[voiceSelect.selectedIndex].value];
+          template = languageTemplate[utterance.voice.lang.substring(0, 2)].split(/:/);
+          utterance.rate = speed;
+          utterance.pitch = pitch;
+          utterance.text = makeContent();
+          speechSynthesis.speak(utterance);
+        }
+      }, false);
+
+      // Check Answer
+      elmCheckAnswer.addEventListener('click', function () {
+        if (speechSynthesis.speaking) {
+          speechSynthesis.resume();
+        } else {
+          utterance = new SpeechSynthesisUtterance();
+          utterance.voice = voices[voiceSelect.options[voiceSelect.selectedIndex].value];
+          template = languageTemplate[utterance.voice.lang.substring(0, 2)].split(/:/);
+          utterance.rate = speed;
+          utterance.pitch = pitch;
+          utterance.text = getAnswerText();
+          speechSynthesis.speak(utterance);
+        }
+      }, false);
+
+      // Voice filter
+      function voiceFilter(str) {
+        for (j = 0; j < supportLang.length; j++) {
+          if (str.indexOf(supportLang[j]) == 0)
+            return true;
+        }
+        return false;
+      }
+
+      // Callback routine for voices
+      function populateVoiceList() {
+        if (voices.length != 0)
+          return;
+        voices = window.speechSynthesis.getVoices();
+        for(i = 0; i < voices.length ; i++) {
+          if (voiceFilter(voices[i].lang)) {
+            var option = document.createElement('option');
+            option.textContent = voices[i].name + ' (' + voices[i].lang + ')';
+            if(voices[i].default) {
+              option.textContent += ' -- DEFAULT';
+            }
+            option.value=i;
+            voiceSelect.appendChild(option);
+          }
+        }
+      }
+
+      // Setting up callback routine
+      if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = populateVoiceList;
+      }
+      populateVoiceList();
+
+      speechSynthesis.cancel();
+
+      // Control logic for HTML widgets
+      // Start button
+      elmStart.addEventListener('click', function () {
+        if (speechSynthesis.speaking) {
+          speechSynthesis.resume();
+        } else {
+          utterance = new SpeechSynthesisUtterance();
+          utterance.voice = voices[voiceSelect.options[voiceSelect.selectedIndex].value];
+          utterance.rate = speed;
+          utterance.pitch = pitch;
+          utterance.text = '123456789';
+          speechSynthesis.speak(utterance);
+        }
+      }, false);
+
+      // Pause button
+      elmPause.addEventListener('click', function () {
+        speechSynthesis.pause();
+      }, false);
+
+      // Stop button
+      elmStop.addEventListener('click', function () {
+        speechSynthesis.cancel();
+      }, false);
+      
+
+      // Generate button
+      elmGenerate.addEventListener('click', function () {
+        var rangeFrom = Number(document.getElementById('minvalue').value);
+        var rangeTo =  Number(document.getElementById('maxvalue').value);
+        var rows = Number(document.getElementById('numvalue').value);
+        var frac = document.getElementById("FractionP").checked;
+        var minus = document.getElementById("SubtractP").checked;
+        if (isNaN(rangeFrom) || isNaN(rangeTo) || isNaN(rows) || 
+            rangeFrom >= rangeTo || rows > 50 || rows < 0) {
+          alert("Input error!");
+          return;
+        }
+        problem = [];
+        var sum = 0;
+        for (var i = 0; i < rows; i++) {
+          var val;
+          if (frac) {
+            val = getRandom(rangeFrom, rangeTo - 1)*100 + getRandom(0, 99);
+          } else {
+            val = getRandom(rangeFrom, rangeTo)*100;
+          }
+          if (minus && (sum > val) && (getRandom(0, 2) < 1)) {
+            val = -val;
+          }
+          sum += val;
+          problem.push(val);
+        }
+        alert('Data prepared!  ' + rows + ' values from ' + rangeFrom + ' to ' + rangeTo);
+        console.log(problem);
+        console.log(sum);
+      }, false);
+
+      function getRandom(min, max) {
+        var random = Math.floor(Math.random() * (max + 1 - min)) + min;
+      return random;
+}
+      // Speed control
+      function speedControl() {
+        speed = speedBar.value;  // rectify 0 - 100 to 0.5 - 2.0    f(0)=0.5 f(50)=1 f(100)=2 
+        speed = (speed < 50) ? (speed / 100.0) + 0.5 : (speed - 50) / 50.0 + 1.0 ;
+      }
+
+      // Pitch control
+      function pitchControl() {
+        pitch = pitchBar.value;  // rectify 0 - 100 to 0 - 2.0 (default = 1.0)
+        pitch = pitch / 50.0;
+      }
+  </script>
+  </body>
+</html>
